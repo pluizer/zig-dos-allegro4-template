@@ -9,6 +9,7 @@ ALLEG_URL     := https://github.com/liballeg/allegro5/releases/download/v4-2-3-1
 ALLEG_SRC     := $(VENDOR)/allegro-$(ALLEG_VER)
 ALLEG_LIB     := $(ALLEG_SRC)/lib/djgpp/liballeg.a
 ALLEG_INC     := $(ALLEG_SRC)/include
+ALLEG_PLATF   := $(ALLEG_INC)/allegro/platform/alplatf.h
 
 # Shim dir lets Allegro's legacy makefile find unprefixed `gcc`/`cc`/etc.
 # Combined with $(DJGPP_BIN) on PATH (provides ar/as/ld/...), this is enough
@@ -65,7 +66,7 @@ $(BUILD)/compiler_rt_shim.o: src/compiler_rt_shim.c | $(BUILD)
 # std.heap.c_allocator. djgpp's sys-include is fed to translate-c so that
 # @cImport(allegro.h) can find <errno.h> etc. ALLEGRO_NO_ASM disables Allegro
 # 4's GCC inline asm headers (al386gcc.h), which clang/translate-c rejects.
-$(ZIG_C): $(ZIG_SRCS) $(ALLEG_SRC)/fix.sh | $(BUILD)
+$(ZIG_C): $(ZIG_SRCS) $(ALLEG_PLATF) | $(BUILD)
 	$(ZIG) build-obj -target x86-freestanding -ofmt=c -OReleaseSmall -lc \
 	    -I$(ALLEG_INC) \
 	    -isystem /usr/$(DJGPP_PREFIX)/sys-include \
@@ -115,8 +116,15 @@ ALLEG_WFLAGS  := -Wall -Wno-unused -fgnu89-inline \
                  -Wno-error=implicit-int \
                  -Wno-error=return-mismatch
 
-$(ALLEG_LIB): $(ALLEG_SRC)/fix.sh $(SHIM_STAMP)
+# Configure Allegro for djgpp: rewrites alplatf.h (#define ALLEGRO_DJGPP) and
+# generates the djgpp-specific autoconf-derived headers. Required before BOTH
+# translating <allegro.h> for Zig (@cImport) AND building liballeg.a — without
+# it, allegro.h falls through to the UNIX path and looks for alunixac.h.
+$(ALLEG_PLATF): $(ALLEG_SRC)/fix.sh
 	cd $(ALLEG_SRC) && sh fix.sh djgpp --quick
+	@touch $@
+
+$(ALLEG_LIB): $(ALLEG_PLATF) $(SHIM_STAMP)
 	cd $(ALLEG_SRC) && PATH="$(abspath $(SHIM_DIR)):$(DJGPP_BIN):$$PATH" \
 	    $(MAKE) lib CROSSCOMPILE=1 DJDIR=/usr/$(DJGPP_PREFIX) \
 	    TARGET_ARCH_EXCL=i386 \
