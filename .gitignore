@@ -1,0 +1,6 @@
+/build/
+/vendor/
+/dos-game.exe
+/CWSDPMI.SWP
+*.o
+*.swp
